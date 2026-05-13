@@ -21,7 +21,7 @@ A macOS desktop app for photographers to review image metadata, assign GPS locat
 ## Requirements
 
 | Dependency | Purpose |
-|---|---|
+| --- | --- |
 | macOS | Tested on macOS 13+ |
 | Python 3.10+ | Runtime |
 | [ExifTool](https://exiftool.org) | Reading and writing image metadata |
@@ -29,6 +29,18 @@ A macOS desktop app for photographers to review image metadata, assign GPS locat
 | Pillow | JPEG and TIFF image loading |
 | rawpy | DNG/RAW image loading |
 | requests | Location search via Nominatim/OpenStreetMap |
+
+---
+
+## Creating the macOS app bundle
+
+After completing installation (steps below), build a double-clickable `.app`:
+
+```bash
+bash create_app.sh
+```
+
+This compiles a native launcher and produces `PhotoNamer.app` in the project folder. Double-click it or drag it to your Dock. The `.app` must stay inside the project folder — if you move the project, just run the script again.
 
 ---
 
@@ -90,7 +102,7 @@ alias photonamer='cd /path/to/photonamer && .venv/bin/python main.py'
 ## Supported file formats
 
 | Format | Read | EXIF write |
-|---|---|---|
+| --- | --- | --- |
 | DNG (RAW) | ✓ embedded preview, fallback to full RAW render | ✓ via ExifTool |
 | JPEG | ✓ | ✓ via ExifTool |
 | TIFF | ✓ | ✓ via ExifTool |

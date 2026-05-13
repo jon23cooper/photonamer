@@ -23,6 +23,14 @@ echo "Compiling launcher..."
 clang -O2 -o "$MACOS/PhotoNamer" launcher.c
 echo "Done."
 
+# Copy icon
+if [ -f "PhotoNamer.icns" ]; then
+    cp "PhotoNamer.icns" "$RESOURCES/PhotoNamer.icns"
+    echo "Icon copied."
+else
+    echo "Warning: PhotoNamer.icns not found — run 'make_icon.py' first."
+fi
+
 # Info.plist
 cat > "$CONTENTS/Info.plist" << 'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -36,6 +44,7 @@ cat > "$CONTENTS/Info.plist" << 'PLIST'
   <key>CFBundleVersion</key>           <string>1.0.0</string>
   <key>CFBundleShortVersionString</key><string>1.0.0</string>
   <key>CFBundleExecutable</key>        <string>PhotoNamer</string>
+  <key>CFBundleIconFile</key>          <string>PhotoNamer</string>
   <key>CFBundlePackageType</key>       <string>APPL</string>
   <key>NSHighResolutionCapable</key>          <true/>
   <key>NSRequiresAquaSystemAppearance</key>   <false/>
