@@ -8,12 +8,20 @@ _TZ_RE = re.compile(r"[+-]\d{2}:\d{2}$|Z$")
 
 
 def _exiftool_path():
+    # shutil.which respects PATH (works in development)
     path = shutil.which("exiftool")
-    if not path:
-        raise FileNotFoundError(
-            "exiftool not found. Install it with: brew install exiftool"
-        )
-    return path
+    if path:
+        return path
+    # .app bundles don't inherit the shell's PATH, so check Homebrew locations directly
+    for candidate in (
+        "/opt/homebrew/bin/exiftool",   # Apple Silicon
+        "/usr/local/bin/exiftool",       # Intel
+    ):
+        if Path(candidate).is_file():
+            return candidate
+    raise FileNotFoundError(
+        "exiftool not found. Install it with: brew install exiftool"
+    )
 
 
 _DATETIME_FIELDS = [
