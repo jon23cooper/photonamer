@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer, QUrl
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QAction, QKeySequence, QDragEnterEvent, QDropEvent
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QSplitter, QVBoxLayout, QHBoxLayout,
@@ -13,6 +13,7 @@ from .metadata_panel import MetadataPanel
 from .map_panel import MapPanel
 from .metadata_handler import read_metadata, write_metadata
 from .file_ops import build_filename, save_and_move
+from .thumbnail_bar import ThumbnailBar
 
 SUPPORTED_EXTENSIONS = {".dng", ".jpg", ".jpeg", ".tif", ".tiff"}
 
@@ -24,7 +25,7 @@ class MainWindow(QMainWindow):
         self._current_metadata: dict = {}
 
         self.setWindowTitle("PhotoNamer")
-        self.resize(1280, 780)
+        self.resize(1280, 820)
         self.setAcceptDrops(True)
         self._build_ui()
         self._build_menu()
@@ -43,9 +44,20 @@ class MainWindow(QMainWindow):
         splitter = QSplitter(Qt.Orientation.Horizontal)
         root_layout.addWidget(splitter, stretch=1)
 
-        # Left: image viewer
+        # Left: image viewer + thumbnail strip
+        left_widget = QWidget()
+        left_layout = QVBoxLayout(left_widget)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setSpacing(4)
+
         self.image_viewer = ImageViewer()
-        splitter.addWidget(self.image_viewer)
+        left_layout.addWidget(self.image_viewer, stretch=1)
+
+        self.thumb_bar = ThumbnailBar()
+        self.thumb_bar.file_selected.connect(self._load_file)
+        left_layout.addWidget(self.thumb_bar)
+
+        splitter.addWidget(left_widget)
 
         # Right: controls
         right_widget = QWidget()
@@ -53,11 +65,9 @@ class MainWindow(QMainWindow):
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(6)
 
-        # Metadata panel
         self.metadata_panel = MetadataPanel()
         right_layout.addWidget(self.metadata_panel)
 
-        # Map panel (inside a GroupBox)
         map_group = QGroupBox("Map — click or search to set GPS location")
         map_layout = QVBoxLayout(map_group)
         map_layout.setContentsMargins(4, 4, 4, 4)
@@ -66,7 +76,6 @@ class MainWindow(QMainWindow):
         map_layout.addWidget(self.map_panel)
         right_layout.addWidget(map_group, stretch=1)
 
-        # File naming panel
         right_layout.addWidget(self._build_naming_panel())
 
         splitter.addWidget(right_widget)
@@ -74,12 +83,10 @@ class MainWindow(QMainWindow):
         splitter.setStretchFactor(1, 1)
         splitter.setSizes([640, 640])
 
-        # Status bar
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
-        self._show_status("Open a file to get started  (File → Open or ⌘O)")
+        self._show_status("Open files to get started  (File → Open or ⌘O, or drag files onto the window)")
 
-        # Wire signals
         self.map_panel.location_changed.connect(self._on_map_location_changed)
         self.metadata_panel.location_changed.connect(self._on_metadata_location_changed)
 
@@ -131,18 +138,35 @@ class MainWindow(QMainWindow):
         file_menu.addAction(quit_action)
 
     # ------------------------------------------------------------------
-    # File opening
+    # File opening / queue management
     # ------------------------------------------------------------------
 
     def _on_open(self):
-        filepath, _ = QFileDialog.getOpenFileName(
+        filepaths, _ = QFileDialog.getOpenFileNames(
             self,
-            "Open Image",
+            "Open Images",
             str(Path.home() / "Pictures"),
             "Images (*.dng *.jpg *.jpeg *.tif *.tiff);;All Files (*)",
         )
-        if filepath:
-            self._load_file(Path(filepath))
+        if filepaths:
+            self._enqueue([Path(p) for p in filepaths])
+
+    def _enqueue(self, paths: list[Path]):
+        """Add paths to the thumbnail queue; load the first new one if nothing is open."""
+        valid = [p for p in paths if p.suffix.lower() in SUPPORTED_EXTENSIONS]
+        if not valid:
+            return
+
+        first_new = None
+        for p in valid:
+            if p not in (self.thumb_bar._items or {}):
+                if first_new is None:
+                    first_new = p
+
+        self.thumb_bar.add_files(valid)
+
+        if self._current_file is None and first_new:
+            self._load_file(first_new)
 
     def _load_file(self, filepath: Path):
         self._show_status(f"Loading {filepath.name}…")
@@ -171,13 +195,13 @@ class MainWindow(QMainWindow):
         self._current_file = filepath
         self._current_metadata = metadata
         self.metadata_panel.set_metadata(metadata)
+        self.thumb_bar.set_active(filepath)
 
         lat = metadata.get("latitude")
         lon = metadata.get("longitude")
         if lat is not None and lon is not None:
             QTimer.singleShot(800, lambda: self.map_panel.set_location(lat, lon))
 
-        # Populate base name from existing filename (minus extension)
         self.name_edit.setText(filepath.stem)
         self._update_filename_preview()
 
@@ -223,7 +247,6 @@ class MainWindow(QMainWindow):
         lat = self.metadata_panel.get_latitude()
         lon = self.metadata_panel.get_longitude()
 
-        # Choose destination folder
         dest_dir = QFileDialog.getExistingDirectory(
             self,
             "Choose Destination Folder",
@@ -232,14 +255,8 @@ class MainWindow(QMainWindow):
         if not dest_dir:
             return
 
-        # Write metadata
         try:
-            write_metadata(
-                self._current_file,
-                datetime_str=dt_str,
-                latitude=lat,
-                longitude=lon,
-            )
+            write_metadata(self._current_file, datetime_str=dt_str, latitude=lat, longitude=lon)
         except FileNotFoundError as exc:
             QMessageBox.critical(self, "exiftool not found", str(exc))
             return
@@ -247,7 +264,6 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Metadata Write Error", str(exc))
             return
 
-        # Build filename and move
         new_filename = build_filename(base, dt_str, self._current_file.suffix)
         try:
             new_path = save_and_move(self._current_file, dest_dir, new_filename)
@@ -255,36 +271,50 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "File Move Error", str(exc))
             return
 
-        self._current_file = new_path
-        self.setWindowTitle(f"PhotoNamer — {new_path.name}")
         self._show_status(f"Saved: {new_path}")
-        QMessageBox.information(
-            self,
-            "Done",
-            f"File saved as:\n{new_path}",
-        )
+
+        # Remove from queue and advance to next
+        finished = self._current_file
+        next_file = self.thumb_bar.next_file(finished)
+        self.thumb_bar.remove_file(finished)
+        self._current_file = None
+
+        if next_file:
+            self._load_file(next_file)
+        else:
+            self.image_viewer.clear()
+            self.save_btn.setEnabled(False)
+            self.name_edit.clear()
+            self.filename_preview.setText("—")
+            self.setWindowTitle("PhotoNamer")
+            self._show_status("Queue complete.")
 
     # ------------------------------------------------------------------
-    # Helpers
+    # Drag and drop
     # ------------------------------------------------------------------
 
     def dragEnterEvent(self, event: QDragEnterEvent):
         if event.mimeData().hasUrls():
-            urls = event.mimeData().urls()
             if any(
                 Path(u.toLocalFile()).suffix.lower() in SUPPORTED_EXTENSIONS
-                for u in urls
+                for u in event.mimeData().urls()
             ):
                 event.acceptProposedAction()
                 return
         event.ignore()
 
     def dropEvent(self, event: QDropEvent):
-        for url in event.mimeData().urls():
-            filepath = Path(url.toLocalFile())
-            if filepath.suffix.lower() in SUPPORTED_EXTENSIONS:
-                self._load_file(filepath)
-                break  # open first valid file only
+        paths = [
+            Path(u.toLocalFile())
+            for u in event.mimeData().urls()
+            if Path(u.toLocalFile()).suffix.lower() in SUPPORTED_EXTENSIONS
+        ]
+        if paths:
+            self._enqueue(paths)
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
 
     def _show_status(self, message: str, timeout_ms: int = 0):
         self.status_bar.showMessage(message, timeout_ms)
