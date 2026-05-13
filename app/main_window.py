@@ -247,13 +247,16 @@ class MainWindow(QMainWindow):
         lat = self.metadata_panel.get_latitude()
         lon = self.metadata_panel.get_longitude()
 
-        dest_dir = QFileDialog.getExistingDirectory(
-            self,
-            "Choose Destination Folder",
-            str(self._current_file.parent),
-        )
-        if not dest_dir:
+        dialog = QFileDialog(self, "Choose Destination Folder", str(self._current_file.parent))
+        dialog.setFileMode(QFileDialog.FileMode.Directory)
+        dialog.setOption(QFileDialog.Option.DontUseNativeDialog)
+        dialog.setLabelText(QFileDialog.DialogLabel.Accept, "Move Here")
+        if not dialog.exec():
             return
+        selected = dialog.selectedFiles()
+        if not selected:
+            return
+        dest_dir = selected[0]
 
         try:
             write_metadata(self._current_file, datetime_str=dt_str, latitude=lat, longitude=lon)
