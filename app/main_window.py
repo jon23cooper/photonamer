@@ -251,6 +251,22 @@ class MainWindow(QMainWindow):
         dialog.setFileMode(QFileDialog.FileMode.Directory)
         dialog.setOption(QFileDialog.Option.DontUseNativeDialog)
         dialog.setLabelText(QFileDialog.DialogLabel.Accept, "Move Here")
+
+        # Build sidebar: standard locations + every mounted external volume
+        from PySide6.QtCore import QUrl
+        sidebar = [
+            QUrl.fromLocalFile(str(Path.home())),
+            QUrl.fromLocalFile(str(Path.home() / "Desktop")),
+            QUrl.fromLocalFile(str(Path.home() / "Documents")),
+            QUrl.fromLocalFile(str(Path.home() / "Pictures")),
+        ]
+        volumes = Path("/Volumes")
+        if volumes.exists():
+            for vol in sorted(volumes.iterdir()):
+                if vol.is_dir():
+                    sidebar.append(QUrl.fromLocalFile(str(vol)))
+        dialog.setSidebarUrls(sidebar)
+
         if not dialog.exec():
             return
         selected = dialog.selectedFiles()
