@@ -11,7 +11,11 @@ def main():
 
     window = MainWindow()
     window.show()
-    sys.exit(app.exec())
+    exit_code = app.exec()
+    # Delete the window explicitly while the app object is still alive so
+    # Qt can tear down WebEngine cleanly before Python's GC runs.
+    del window
+    sys.exit(exit_code)
 
 
 if __name__ == "__main__":

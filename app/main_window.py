@@ -335,5 +335,14 @@ class MainWindow(QMainWindow):
     # Helpers
     # ------------------------------------------------------------------
 
+    def closeEvent(self, event):
+        # Stop background threads before Qt starts tearing down objects
+        self.thumb_bar.shutdown()
+        # Navigate away so QtWebEngine can shut its renderer process down cleanly
+        # before Python destroys our wrapper objects (prevents abort() on exit)
+        from PySide6.QtCore import QUrl
+        self.map_panel.setUrl(QUrl("about:blank"))
+        super().closeEvent(event)
+
     def _show_status(self, message: str, timeout_ms: int = 0):
         self.status_bar.showMessage(message, timeout_ms)

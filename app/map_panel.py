@@ -124,7 +124,7 @@ class MapPanel(QWebEngineView):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._bridge = _Bridge()
+        self._bridge = _Bridge(self)   # parent ensures correct destruction order
         self._bridge.location_selected.connect(self.location_changed)
 
         self._channel = QWebChannel(self.page())

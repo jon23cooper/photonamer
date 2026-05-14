@@ -202,6 +202,12 @@ class ThumbnailBar(QWidget):
     def is_empty(self) -> bool:
         return not self._items
 
+    def shutdown(self):
+        """Stop any running background loader thread before app exit."""
+        if self._thread and self._thread.isRunning():
+            self._thread.quit()
+            self._thread.wait(2000)
+
     def clear(self):
         for item in self._items.values():
             self._row.removeWidget(item)
